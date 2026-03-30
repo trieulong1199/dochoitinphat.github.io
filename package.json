@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "setup:lark": "ts-node --skip-project scripts/setup-lark-tables.ts"
   },
   "dependencies": {
     "next": "14.2.35",
@@ -39,6 +40,8 @@
     "postcss": "^8.4.49",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "14.2.35"
+    "eslint-config-next": "14.2.35",
+    "ts-node": "^10.9.2",
+    "dotenv": "^16.4.5"
   }
 }
