@@ -1,34 +1,111 @@
-name: Deploy to Vercel
+name: Deploy to VPS
 
 on:
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          node-version: '20'
-          cache: 'npm'
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          command_timeout: 20m
+          script: |
+            set -e
 
-      - name: Install dependencies
-        run: npm ci
+            APP_DIR="/var/www/wholesale"
+            DOMAIN="daily.dochoitinphat.com"
 
-      - name: Type check
-        run: npx tsc --noEmit
+            echo "=== [1/6] Kiểm tra Node.js ==="
+            if ! command -v node &>/dev/null || [[ $(node -v | cut -d. -f1 | tr -d 'v') -lt 18 ]]; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
+            fi
+            node -v
 
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
-          working-directory: ./
+            echo "=== [2/6] Cài PM2 + nginx ==="
+            command -v pm2 &>/dev/null || npm install -g pm2 -q
+            command -v nginx &>/dev/null || apt-get install -y nginx -q
+
+            echo "=== [3/6] Clone / update code ==="
+            if [ -d "$APP_DIR/.git" ]; then
+              cd "$APP_DIR" && git fetch origin && git reset --hard origin/main
+            else
+              mkdir -p "$(dirname $APP_DIR)"
+              git clone https://github.com/trieulong1199/dochoitinphat.github.io.git "$APP_DIR"
+            fi
+            cd "$APP_DIR"
+
+            echo "=== [4/6] Tạo .env.local ==="
+            cat > .env.local << 'ENVEOF'
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            NEXTAUTH_URL=https://daily.dochoitinphat.com
+            LARK_APP_ID=${{ secrets.LARK_APP_ID }}
+            LARK_APP_SECRET=${{ secrets.LARK_APP_SECRET }}
+            LARK_APP_TOKEN=${{ secrets.LARK_APP_TOKEN }}
+            LARK_BASE_URL=https://open.larksuite.com
+            LARK_TABLE_PRODUCTS=${{ secrets.LARK_TABLE_PRODUCTS }}
+            LARK_TABLE_USERS=${{ secrets.LARK_TABLE_USERS }}
+            LARK_TABLE_ORDERS=${{ secrets.LARK_TABLE_ORDERS }}
+            LARK_TABLE_ORDER_ITEMS=${{ secrets.LARK_TABLE_ORDER_ITEMS }}
+            ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}
+            ENVEOF
+
+            echo "=== [5/6] Build ==="
+            npm ci --prefer-offline
+            npm run build
+
+            # Copy static files cho standalone
+            cp -r public .next/standalone/public
+            cp -r .next/static .next/standalone/.next/static
+
+            echo "=== [6/6] Khởi động PM2 ==="
+            pm2 delete wholesale-portal 2>/dev/null || true
+            PORT=3000 pm2 start .next/standalone/server.js \
+              --name wholesale-portal \
+              --cwd "$APP_DIR"
+            pm2 save
+            pm2 startup systemd -u root --hp /root | tail -1
+
+            echo "=== Cấu hình nginx ==="
+            cat > /etc/nginx/sites-available/wholesale << NGINX
+            server {
+                listen 80;
+                server_name $DOMAIN;
+                client_max_body_size 10M;
+                location / {
+                    proxy_pass http://127.0.0.1:3000;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                    proxy_cache_bypass \$http_upgrade;
+                }
+                location /_next/static {
+                    proxy_pass http://127.0.0.1:3000;
+                    add_header Cache-Control "public, max-age=31536000, immutable";
+                }
+            }
+            NGINX
+
+            ln -sf /etc/nginx/sites-available/wholesale /etc/nginx/sites-enabled/wholesale
+            rm -f /etc/nginx/sites-enabled/default
+            nginx -t && systemctl reload nginx
+
+            echo "=== SSL ==="
+            command -v certbot &>/dev/null || apt-get install -y certbot python3-certbot-nginx -q
+            certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos \
+              --email admin@dochoitinphat.com --redirect 2>&1 | tail -3 || true
+
+            echo ""
+            echo "✅ DEPLOY XONG! https://$DOMAIN"
+            pm2 list
