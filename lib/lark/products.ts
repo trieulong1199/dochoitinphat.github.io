@@ -11,10 +11,10 @@ export interface LarkProduct {
   imageUrl: string | null
 }
 
-function extractImageUrl(attachments: unknown): string | null {
+function extractImageUrl(attachments: unknown, recordId: string): string | null {
   if (!Array.isArray(attachments) || attachments.length === 0) return null
-  const first = attachments[0] as { tmp_url?: string; url?: string }
-  return first.tmp_url || first.url || null
+  // Dùng proxy route để tránh tmp_url hết hạn
+  return `/api/images/${recordId}`
 }
 
 export async function getLarkProducts(): Promise<LarkProduct[]> {
@@ -33,7 +33,7 @@ export async function getLarkProducts(): Promise<LarkProduct[]> {
       quiCach,
       giaVip,
       giaThung: giaVip * quiCach,
-      imageUrl: extractImageUrl(fields[PRODUCT_FIELDS.IMAGE]),
+      imageUrl: extractImageUrl(fields[PRODUCT_FIELDS.IMAGE], record.record_id),
     }
   })
 }

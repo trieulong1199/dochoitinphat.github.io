@@ -1,4 +1,5 @@
 import * as lark from '@larksuiteoapi/node-sdk'
+import '@/lib/env' // validate env vars at startup
 
 // ─── Lark Base config ─────────────────────────────────────────────────────────
 export const LARK_CONFIG = {
