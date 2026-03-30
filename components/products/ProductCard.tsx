@@ -6,6 +6,7 @@ import { ShoppingCart, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useCartStore } from '@/store/cart'
+import { useToast } from '@/store/toast'
 import { formatCurrency } from '@/lib/utils'
 import type { LarkProduct } from '@/lib/lark/products'
 
@@ -15,11 +16,11 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const [quantity, setQuantity] = useState(1)
-  const [added, setAdded] = useState(false)
   const addItem = useCartStore((s) => s.addItem)
+  const toast = useToast()
 
   function handleAdd() {
-    if (quantity < 1) return
+    const qty = Math.max(1, quantity)
     addItem({
       larkSkuId: product.recordId,
       sku: product.sku,
@@ -27,11 +28,14 @@ export function ProductCard({ product }: ProductCardProps) {
       quiCach: product.quiCach,
       giaVip: product.giaVip,
       giaThung: product.giaThung,
-      soLuongThung: quantity,
+      soLuongThung: qty,
       imageUrl: product.imageUrl,
     })
-    setAdded(true)
-    setTimeout(() => setAdded(false), 1500)
+    toast({
+      title: 'Đã thêm vào giỏ',
+      description: `${product.name} × ${qty} thùng`,
+      variant: 'success',
+    })
   }
 
   return (
@@ -54,19 +58,21 @@ export function ProductCard({ product }: ProductCardProps) {
       </div>
 
       {/* Info */}
-      <div className="p-3 space-y-2">
+      <div className="p-3 space-y-1.5">
         <p className="text-xs text-gray-400 font-mono">{product.sku}</p>
         <h3 className="font-semibold text-sm leading-tight line-clamp-2" title={product.name}>
           {product.name}
         </h3>
-
         <div className="text-xs text-gray-500 space-y-0.5">
           <p>Qui cách: <span className="font-medium text-gray-700">{product.quiCach} cái/thùng</span></p>
           <p>Giá VIP: <span className="font-medium text-blue-600">{formatCurrency(product.giaVip)}/cái</span></p>
-          <p className="text-base font-bold text-orange-600 mt-1">{formatCurrency(product.giaThung)}<span className="text-xs font-normal text-gray-500">/thùng</span></p>
         </div>
+        <p className="text-base font-bold text-orange-600">
+          {formatCurrency(product.giaThung)}
+          <span className="text-xs font-normal text-gray-500">/thùng</span>
+        </p>
 
-        {/* Quantity & Add */}
+        {/* Quantity + Add */}
         <div className="flex gap-2 pt-1">
           <Input
             type="number"
@@ -75,14 +81,9 @@ export function ProductCard({ product }: ProductCardProps) {
             onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
             className="w-16 h-8 text-center text-sm px-1"
           />
-          <Button
-            onClick={handleAdd}
-            size="sm"
-            className="flex-1 h-8 text-xs"
-            variant={added ? 'secondary' : 'default'}
-          >
-            <ShoppingCart size={14} />
-            {added ? 'Đã thêm' : 'Thêm vào giỏ'}
+          <Button onClick={handleAdd} size="sm" className="flex-1 h-8 text-xs gap-1">
+            <ShoppingCart size={13} />
+            Thêm vào giỏ
           </Button>
         </div>
       </div>

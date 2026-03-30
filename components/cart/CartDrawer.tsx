@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ShoppingCart, X, Trash2, Minus, Plus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCartStore } from '@/store/cart'
+import { useToast } from '@/store/toast'
 import { formatCurrency } from '@/lib/utils'
 
 export function CartDrawer() {
@@ -12,6 +13,7 @@ export function CartDrawer() {
   const [submitting, setSubmitting] = useState(false)
   const [note, setNote] = useState('')
   const router = useRouter()
+  const toast = useToast()
 
   const { items, removeItem, updateQuantity, clearCart, totalAmount, totalItems } = useCartStore()
   const total = totalAmount()
@@ -26,14 +28,24 @@ export function CartDrawer() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items, note }),
       })
-      if (!res.ok) throw new Error('Lỗi tạo đơn')
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Lỗi tạo đơn hàng')
+      }
+
       const data = await res.json()
       clearCart()
       setOpen(false)
+      setNote('')
+      toast({ title: '🎉 Đặt hàng thành công!', description: `Mã đơn: ${data.orderCode}`, variant: 'success' })
       router.push(`/orders/${data.orderId}`)
     } catch (err) {
-      alert('Có lỗi xảy ra khi đặt hàng. Vui lòng thử lại.')
-      console.error(err)
+      toast({
+        title: 'Đặt hàng thất bại',
+        description: err instanceof Error ? err.message : 'Vui lòng thử lại.',
+        variant: 'destructive',
+      })
     } finally {
       setSubmitting(false)
     }
@@ -41,7 +53,7 @@ export function CartDrawer() {
 
   return (
     <>
-      {/* Trigger button */}
+      {/* Trigger */}
       <button
         onClick={() => setOpen(true)}
         className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
@@ -55,7 +67,7 @@ export function CartDrawer() {
         )}
       </button>
 
-      {/* Overlay */}
+      {/* Drawer */}
       {open && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
@@ -89,26 +101,22 @@ export function CartDrawer() {
                       </p>
                     </div>
                     <div className="flex flex-col items-center gap-2">
-                      {/* Quantity */}
                       <div className="flex items-center border rounded overflow-hidden">
                         <button
-                          className="px-2 py-1 hover:bg-gray-200 text-sm"
+                          className="px-2 py-1 hover:bg-gray-200"
                           onClick={() => updateQuantity(item.larkSkuId, item.soLuongThung - 1)}
                         >
                           <Minus size={12} />
                         </button>
                         <span className="w-8 text-center text-sm font-medium">{item.soLuongThung}</span>
                         <button
-                          className="px-2 py-1 hover:bg-gray-200 text-sm"
+                          className="px-2 py-1 hover:bg-gray-200"
                           onClick={() => updateQuantity(item.larkSkuId, item.soLuongThung + 1)}
                         >
                           <Plus size={12} />
                         </button>
                       </div>
-                      <button
-                        onClick={() => removeItem(item.larkSkuId)}
-                        className="text-red-400 hover:text-red-600"
-                      >
+                      <button onClick={() => removeItem(item.larkSkuId)} className="text-red-400 hover:text-red-600">
                         <Trash2 size={14} />
                       </button>
                     </div>
