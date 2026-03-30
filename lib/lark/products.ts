@@ -1,13 +1,13 @@
-import { larkClient, LARK_CONFIG, LARK_FIELDS } from './client'
+import { LARK_CONFIG, PRODUCT_FIELDS, listAllRecords } from './client'
 
 export interface LarkProduct {
   recordId: string
   productId: string
   sku: string
   name: string
-  quiCach: number      // số cái/thùng
-  giaVip: number       // giá 1 cái
-  giaThung: number     // = giaVip × quiCach
+  quiCach: number
+  giaVip: number
+  giaThung: number
   imageUrl: string | null
 }
 
@@ -18,44 +18,22 @@ function extractImageUrl(attachments: unknown): string | null {
 }
 
 export async function getLarkProducts(): Promise<LarkProduct[]> {
-  const products: LarkProduct[] = []
+  const records = await listAllRecords(LARK_CONFIG.tables.products)
 
-  let pageToken: string | undefined = undefined
+  return records.map((record) => {
+    const fields = record.fields
+    const quiCach = Number(fields[PRODUCT_FIELDS.QUI_CACH]) || 0
+    const giaVip = Number(fields[PRODUCT_FIELDS.GIA_VIP]) || 0
 
-  do {
-    const res = await larkClient.bitable.appTableRecord.list({
-      path: {
-        app_token: LARK_CONFIG.appToken,
-        table_id: LARK_CONFIG.tableProducts,
-      },
-      params: {
-        page_size: 100,
-        page_token: pageToken,
-      },
-    })
-
-    if (!res.data?.items) break
-
-    for (const record of res.data.items) {
-      const fields = record.fields as Record<string, unknown>
-
-      const quiCach = Number(fields[LARK_FIELDS.QUI_CACH]) || 0
-      const giaVip = Number(fields[LARK_FIELDS.GIA_VIP]) || 0
-
-      products.push({
-        recordId: record.record_id!,
-        productId: String(fields[LARK_FIELDS.PRODUCT_ID] || ''),
-        sku: String(fields[LARK_FIELDS.SKU] || ''),
-        name: String(fields[LARK_FIELDS.NAME] || ''),
-        quiCach,
-        giaVip,
-        giaThung: giaVip * quiCach,
-        imageUrl: extractImageUrl(fields[LARK_FIELDS.IMAGE]),
-      })
+    return {
+      recordId: record.record_id,
+      productId: String(fields[PRODUCT_FIELDS.PRODUCT_ID] || ''),
+      sku: String(fields[PRODUCT_FIELDS.SKU] || ''),
+      name: String(fields[PRODUCT_FIELDS.NAME] || ''),
+      quiCach,
+      giaVip,
+      giaThung: giaVip * quiCach,
+      imageUrl: extractImageUrl(fields[PRODUCT_FIELDS.IMAGE]),
     }
-
-    pageToken = res.data.page_token || undefined
-  } while (pageToken)
-
-  return products
+  })
 }

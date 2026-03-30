@@ -10,7 +10,7 @@ declare module 'next-auth' {
 
   interface Session {
     user: {
-      id: string
+      id: string          // Lark recordId
       username: string
       companyName: string
       phone?: string

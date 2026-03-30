@@ -1,20 +1,11 @@
 import { auth } from '@/auth'
-import { prisma } from '@/lib/db/prisma'
+import { getOrdersByUserId, ORDER_STATUS_LABEL, type OrderStatus } from '@/lib/lark/orders'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
-import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { FileText } from 'lucide-react'
 
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: 'Chờ xác nhận',
-  CONFIRMED: 'Đã xác nhận',
-  SHIPPING: 'Đang giao',
-  DONE: 'Hoàn tất',
-  CANCELLED: 'Đã hủy',
-}
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'destructive'> = {
+const STATUS_VARIANT: Record<OrderStatus, 'default' | 'secondary' | 'success' | 'warning' | 'destructive'> = {
   PENDING: 'warning',
   CONFIRMED: 'default',
   SHIPPING: 'secondary',
@@ -22,15 +13,22 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'success' | 'warn
   CANCELLED: 'destructive',
 }
 
+function formatDate(iso: string) {
+  try {
+    return new Intl.DateTimeFormat('vi-VN', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }).format(new Date(iso))
+  } catch {
+    return iso
+  }
+}
+
 export default async function OrdersPage() {
   const session = await auth()
   if (!session) return null
 
-  const orders = await prisma.order.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: 'desc' },
-    include: { items: true },
-  })
+  const orders = await getOrdersByUserId(session.user.id)
 
   return (
     <div>
@@ -47,18 +45,16 @@ export default async function OrdersPage() {
       ) : (
         <div className="space-y-3">
           {orders.map((order) => (
-            <Link key={order.id} href={`/orders/${order.id}`}>
+            <Link key={order.recordId} href={`/orders/${order.recordId}`}>
               <div className="bg-white border rounded-xl p-4 hover:shadow-md transition-shadow cursor-pointer">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="font-bold text-gray-800">{order.orderCode}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {format(order.createdAt, 'dd/MM/yyyy HH:mm')} · {order.items.length} mặt hàng
-                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatDate(order.createdAt)}</p>
                   </div>
                   <div className="text-right">
                     <Badge variant={STATUS_VARIANT[order.status]}>
-                      {STATUS_LABEL[order.status]}
+                      {ORDER_STATUS_LABEL[order.status]}
                     </Badge>
                     <p className="font-bold text-orange-600 mt-1">{formatCurrency(order.totalAmount)}</p>
                   </div>

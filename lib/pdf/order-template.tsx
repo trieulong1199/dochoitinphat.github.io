@@ -7,7 +7,7 @@ import {
   Font,
 } from '@react-pdf/renderer'
 import { format } from 'date-fns'
-import type { Order, OrderItem, User } from '@prisma/client'
+import type { LarkOrder } from '@/lib/lark/orders'
 
 Font.register({
   family: 'Roboto',
@@ -18,58 +18,17 @@ Font.register({
 })
 
 const styles = StyleSheet.create({
-  page: {
-    fontFamily: 'Roboto',
-    fontSize: 10,
-    padding: 40,
-    color: '#1a1a1a',
-  },
-  header: {
-    marginBottom: 20,
-    borderBottom: '2pt solid #2563EB',
-    paddingBottom: 12,
-  },
-  companyName: {
-    fontSize: 18,
-    fontWeight: 700,
-    color: '#2563EB',
-    marginBottom: 4,
-  },
-  orderTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    marginBottom: 4,
-  },
-  row: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  label: {
-    width: 120,
-    color: '#6b7280',
-  },
-  value: {
-    flex: 1,
-    fontWeight: 700,
-  },
-  table: {
-    marginTop: 16,
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#2563EB',
-    color: 'white',
-    padding: '6 4',
-    fontWeight: 700,
-  },
-  tableRow: {
-    flexDirection: 'row',
-    borderBottom: '1pt solid #e5e7eb',
-    padding: '5 4',
-  },
-  tableRowEven: {
-    backgroundColor: '#f9fafb',
-  },
+  page: { fontFamily: 'Roboto', fontSize: 10, padding: 40, color: '#1a1a1a' },
+  header: { marginBottom: 20, borderBottom: '2pt solid #2563EB', paddingBottom: 12 },
+  companyName: { fontSize: 18, fontWeight: 700, color: '#2563EB', marginBottom: 4 },
+  orderTitle: { fontSize: 14, fontWeight: 700, marginBottom: 4 },
+  row: { flexDirection: 'row', marginBottom: 4 },
+  label: { width: 120, color: '#6b7280' },
+  value: { flex: 1, fontWeight: 700 },
+  table: { marginTop: 16 },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#2563EB', color: 'white', padding: '6 4', fontWeight: 700 },
+  tableRow: { flexDirection: 'row', borderBottom: '1pt solid #e5e7eb', padding: '5 4' },
+  tableRowEven: { backgroundColor: '#f9fafb' },
   colNo: { width: '5%' },
   colSku: { width: '12%' },
   colName: { width: '33%' },
@@ -78,58 +37,33 @@ const styles = StyleSheet.create({
   colGiaThung: { width: '13%', textAlign: 'right' },
   colSoLuong: { width: '8%', textAlign: 'center' },
   colThanhTien: { width: '16%', textAlign: 'right' },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTop: '2pt solid #2563EB',
-  },
-  totalLabel: {
-    fontWeight: 700,
-    fontSize: 12,
-    marginRight: 16,
-  },
-  totalValue: {
-    fontWeight: 700,
-    fontSize: 12,
-    color: '#dc2626',
-  },
-  footer: {
-    marginTop: 32,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  signBox: {
-    width: '45%',
-    textAlign: 'center',
-  },
-  signTitle: {
-    fontWeight: 700,
-    marginBottom: 40,
-  },
+  totalRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, paddingTop: 8, borderTop: '2pt solid #2563EB' },
+  totalLabel: { fontWeight: 700, fontSize: 12, marginRight: 16 },
+  totalValue: { fontWeight: 700, fontSize: 12, color: '#dc2626' },
+  footer: { marginTop: 32, flexDirection: 'row', justifyContent: 'space-between' },
+  signBox: { width: '45%', textAlign: 'center' },
+  signTitle: { fontWeight: 700, marginBottom: 40 },
 })
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('vi-VN').format(amount) + ' đ'
+function fmt(n: number) {
+  return new Intl.NumberFormat('vi-VN').format(n) + ' đ'
 }
 
-type OrderWithDetails = Order & {
-  items: OrderItem[]
-  user: User
-}
+export function OrderPDFDocument({ order }: { order: LarkOrder }) {
+  const items = order.items ?? []
+  const createdAt = (() => {
+    try { return format(new Date(order.createdAt), 'dd/MM/yyyy HH:mm') }
+    catch { return order.createdAt }
+  })()
 
-export function OrderPDFDocument({ order }: { order: OrderWithDetails }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.companyName}>ĐỒ CHƠI TÍN PHÁT</Text>
           <Text style={styles.orderTitle}>PHIẾU ĐẶT HÀNG SỈ</Text>
         </View>
 
-        {/* Order Info */}
         <View style={{ marginBottom: 16 }}>
           <View style={styles.row}>
             <Text style={styles.label}>Mã đơn hàng:</Text>
@@ -137,15 +71,15 @@ export function OrderPDFDocument({ order }: { order: OrderWithDetails }) {
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Đại lý:</Text>
-            <Text style={styles.value}>{order.user.companyName}</Text>
+            <Text style={styles.value}>{order.companyName}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Số điện thoại:</Text>
-            <Text style={styles.value}>{order.user.phone || '-'}</Text>
+            <Text style={styles.value}>{order.phone || '-'}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Ngày đặt:</Text>
-            <Text style={styles.value}>{format(order.createdAt, 'dd/MM/yyyy HH:mm')}</Text>
+            <Text style={styles.value}>{createdAt}</Text>
           </View>
           {order.note && (
             <View style={styles.row}>
@@ -155,7 +89,6 @@ export function OrderPDFDocument({ order }: { order: OrderWithDetails }) {
           )}
         </View>
 
-        {/* Table */}
         <View style={styles.table}>
           <View style={styles.tableHeader}>
             <Text style={styles.colNo}>#</Text>
@@ -168,27 +101,25 @@ export function OrderPDFDocument({ order }: { order: OrderWithDetails }) {
             <Text style={styles.colThanhTien}>Thành tiền</Text>
           </View>
 
-          {order.items.map((item, idx) => (
-            <View key={item.id} style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowEven : {}]}>
+          {items.map((item, idx) => (
+            <View key={item.larkSkuId + idx} style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowEven : {}]}>
               <Text style={styles.colNo}>{idx + 1}</Text>
               <Text style={styles.colSku}>{item.sku}</Text>
               <Text style={styles.colName}>{item.name}</Text>
               <Text style={styles.colQC}>{item.quiCach}</Text>
-              <Text style={styles.colGiaVip}>{formatCurrency(item.giaVip)}</Text>
-              <Text style={styles.colGiaThung}>{formatCurrency(item.giaThung)}</Text>
+              <Text style={styles.colGiaVip}>{fmt(item.giaVip)}</Text>
+              <Text style={styles.colGiaThung}>{fmt(item.giaThung)}</Text>
               <Text style={styles.colSoLuong}>{item.soLuongThung}</Text>
-              <Text style={styles.colThanhTien}>{formatCurrency(item.thanhTien)}</Text>
+              <Text style={styles.colThanhTien}>{fmt(item.thanhTien)}</Text>
             </View>
           ))}
         </View>
 
-        {/* Total */}
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>TỔNG CỘNG:</Text>
-          <Text style={styles.totalValue}>{formatCurrency(order.totalAmount)}</Text>
+          <Text style={styles.totalValue}>{fmt(order.totalAmount)}</Text>
         </View>
 
-        {/* Footer */}
         <View style={styles.footer}>
           <View style={styles.signBox}>
             <Text style={styles.signTitle}>Đại lý</Text>

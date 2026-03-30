@@ -1,7 +1,8 @@
 import NextAuth from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
-import { prisma } from '@/lib/db/prisma'
+import { getUserByUsername } from '@/lib/lark/users'
+import { authConfig } from './auth.config'
 import { z } from 'zod'
 
 const loginSchema = z.object({
@@ -10,6 +11,7 @@ const loginSchema = z.object({
 })
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -21,18 +23,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!parsed.success) return null
 
         const { username, password } = parsed.data
-
-        const user = await prisma.user.findUnique({
-          where: { username },
-        })
+        const user = await getUserByUsername(username)
 
         if (!user || !user.isActive) return null
 
-        const passwordMatch = await bcrypt.compare(password, user.password)
-        if (!passwordMatch) return null
+        const match = await bcrypt.compare(password, user.password)
+        if (!match) return null
 
         return {
-          id: user.id,
+          id: user.recordId,
           name: user.companyName,
           username: user.username,
           companyName: user.companyName,
@@ -42,6 +41,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
+    ...authConfig.callbacks,
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
@@ -61,10 +61,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return session
     },
   },
-  pages: {
-    signIn: '/login',
-  },
-  session: {
-    strategy: 'jwt',
-  },
+  session: { strategy: 'jwt' },
 })
