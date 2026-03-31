@@ -33,8 +33,8 @@ apt-get update -qq
 # ── 2. Cài Node.js ────────────────────────────────────────────
 if ! command -v node &>/dev/null || [[ $(node -v | cut -d. -f1 | tr -d 'v') -lt 18 ]]; then
   log "Cài Node.js $NODE_VERSION..."
-  curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - -qq
-  apt-get install -y nodejs -qq
+  curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
+  apt-get install -y nodejs
 else
   log "Node.js $(node -v) đã có sẵn"
 fi
