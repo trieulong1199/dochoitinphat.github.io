@@ -22,12 +22,16 @@ function parseUser(record: { record_id: string; fields: Record<string, unknown> 
 }
 
 export async function getUserByUsername(username: string): Promise<LarkUser | null> {
-  const records = await listAllRecords(LARK_CONFIG.tables.users, {
-    filter: `CurrentValue.[${USER_FIELDS.USERNAME}]="${username}"`,
-    pageSize: 1,
-  })
-  if (records.length === 0) return null
-  return parseUser(records[0])
+  try {
+    const records = await listAllRecords(LARK_CONFIG.tables.users, {
+      filter: `CurrentValue.[${USER_FIELDS.USERNAME}]="${username}"`,
+      pageSize: 1,
+    })
+    if (records.length === 0) return null
+    return parseUser(records[0])
+  } catch {
+    return null
+  }
 }
 
 export async function getUserById(recordId: string): Promise<LarkUser | null> {
@@ -71,8 +75,12 @@ export async function createUser(data: {
     },
   })
 
+  const record = res.data?.record
+  if (!record) {
+    throw new Error(`Lark create user failed: ${JSON.stringify(res)}`)
+  }
   return parseUser({
-    record_id: res.data!.record!.record_id!,
-    fields: (res.data!.record!.fields as Record<string, unknown>) ?? {},
+    record_id: record.record_id!,
+    fields: (record.fields as Record<string, unknown>) ?? {},
   })
 }
