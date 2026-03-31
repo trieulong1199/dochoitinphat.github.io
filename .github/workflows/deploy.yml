@@ -1,34 +1,91 @@
-name: Deploy to Vercel
+name: Deploy to VPS
 
 on:
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          node-version: '20'
-          cache: 'npm'
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          command_timeout: 20m
+          script: |
+            set -e
 
-      - name: Install dependencies
-        run: npm ci
+            APP_DIR="/var/www/wholesale"
+            DOMAIN="daily.dochoitinphat.com"
+            APP_PORT=3001
 
-      - name: Type check
-        run: npx tsc --noEmit
+            echo "=== [1/6] Kiểm tra Node.js ==="
+            if ! command -v node &>/dev/null || [[ $(node -v | cut -d. -f1 | tr -d 'v') -lt 18 ]]; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+              apt-get install -y nodejs
+            fi
+            node -v
 
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
-          working-directory: ./
+            echo "=== [2/6] Cài PM2 ==="
+            command -v pm2 &>/dev/null || npm install -g pm2 -q
+
+            echo "=== [3/6] Clone / update code ==="
+            if [ -d "$APP_DIR/.git" ]; then
+              cd "$APP_DIR" && git fetch origin && git reset --hard origin/main
+            else
+              mkdir -p "$(dirname $APP_DIR)"
+              git clone https://github.com/trieulong1199/dochoitinphat.github.io.git "$APP_DIR"
+            fi
+            cd "$APP_DIR"
+
+            echo "=== [4/6] Tạo .env.local ==="
+            cat > .env.local << 'ENVEOF'
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            NEXTAUTH_URL=https://daily.dochoitinphat.com
+            LARK_APP_ID=${{ secrets.LARK_APP_ID }}
+            LARK_APP_SECRET=${{ secrets.LARK_APP_SECRET }}
+            LARK_APP_TOKEN=${{ secrets.LARK_APP_TOKEN }}
+            LARK_BASE_URL=https://open.larksuite.com
+            LARK_TABLE_PRODUCTS=${{ secrets.LARK_TABLE_PRODUCTS }}
+            LARK_TABLE_USERS=${{ secrets.LARK_TABLE_USERS }}
+            LARK_TABLE_ORDERS=${{ secrets.LARK_TABLE_ORDERS }}
+            LARK_TABLE_ORDER_ITEMS=${{ secrets.LARK_TABLE_ORDER_ITEMS }}
+            ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}
+            ENVEOF
+
+            echo "=== [5/6] Build ==="
+            npm ci --prefer-offline
+            npm run build
+
+            # Copy static files cho standalone
+            cp -r public .next/standalone/public
+            cp -r .next/static .next/standalone/.next/static
+
+            echo "=== [6/6] Khởi động PM2 ==="
+            pm2 delete wholesale-portal 2>/dev/null || true
+            PORT=$APP_PORT pm2 start .next/standalone/server.js \
+              --name wholesale-portal \
+              --cwd "$APP_DIR"
+            pm2 save
+            pm2 startup systemd -u root --hp /root | tail -1
+
+            echo "=== Cấu hình Caddy ==="
+            # Thêm config nếu chưa có
+            if ! grep -q "$DOMAIN" /etc/caddy/Caddyfile 2>/dev/null; then
+              tee -a /etc/caddy/Caddyfile > /dev/null << CADDYEOF
+
+            $DOMAIN {
+                reverse_proxy localhost:$APP_PORT
+            }
+            CADDYEOF
+            fi
+            caddy fmt --overwrite /etc/caddy/Caddyfile
+            systemctl reload caddy
+
+            echo ""
+            echo "DEPLOY XONG! https://$DOMAIN"
+            pm2 list
